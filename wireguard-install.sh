@@ -102,6 +102,20 @@ function initialCheck() {
 }
 
 function installQuestions() {
+
+	if [[ $AUTO_INSTALL == "y" ]]; then
+		export DEBIAN_FRONTEND=noninteractive
+		SERVER_PUB_NIC="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
+		SERVER_WG_NIC='wg0'
+		SERVER_WG_IPV4='10.66.66.1'
+		SERVER_WG_IPV6='fd42:42:42::1'
+		SERVER_PORT=$(shuf -i49152-65535 -n1)
+		CLIENT_DNS_1="$SERVER_WG_IPV4"
+		CLIENT_DNS_2="$CLIENT_DNS_1"
+		ALLOWED_IPS="0.0.0.0/0,::/0"
+		CLIENT_NAME='01'
+	fi
+
 	echo "Welcome to the WireGuard installer!"
 	echo "The git repository is available at: https://github.com/angristan/wireguard-install"
 	echo ""
@@ -115,7 +129,9 @@ function installQuestions() {
 		# Detect public IPv6 address
 		SERVER_PUB_IP=$(ip -6 addr | sed -ne 's|^.* inet6 \([^/]*\)/.* scope global.*$|\1|p' | head -1)
 	fi
-	read -rp "IPv4 or IPv6 public address: " -e -i "${SERVER_PUB_IP}" SERVER_PUB_IP
+	if [[ $AUTO_INSTALL != "y" ]]; then
+		read -rp "IPv4 or IPv6 public address: " -e -i "${SERVER_PUB_IP}" SERVER_PUB_IP
+	fi
 
 	# Detect public interface and pre-fill for the user
 	SERVER_NIC="$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)"
@@ -163,7 +179,9 @@ function installQuestions() {
 	echo ""
 	echo "Okay, that was all I needed. We are ready to setup your WireGuard server now."
 	echo "You will be able to generate a client at the end of the installation."
-	read -n1 -r -p "Press any key to continue..."
+	if [[ $AUTO_INSTALL != "y" ]]; then
+		read -n1 -r -p "Press any key to continue..."
+	fi
 }
 
 function installWireGuard() {
@@ -296,7 +314,9 @@ function newClient() {
 	echo "The client name must consist of alphanumeric character(s). It may also include underscores or dashes and can't exceed 15 chars."
 
 	until [[ ${CLIENT_NAME} =~ ^[a-zA-Z0-9_-]+$ && ${CLIENT_EXISTS} == '0' && ${#CLIENT_NAME} -lt 16 ]]; do
-		read -rp "Client name: " -e CLIENT_NAME
+		if [[ $AUTO_INSTALL != "y" ]]; then
+			read -rp "Client name: " -e CLIENT_NAME
+		fi
 		CLIENT_EXISTS=$(grep -c -E "^### Client ${CLIENT_NAME}\$" "/etc/wireguard/${SERVER_WG_NIC}.conf")
 
 		if [[ ${CLIENT_EXISTS} != 0 ]]; then
@@ -321,7 +341,9 @@ function newClient() {
 
 	BASE_IP=$(echo "$SERVER_WG_IPV4" | awk -F '.' '{ print $1"."$2"."$3 }')
 	until [[ ${IPV4_EXISTS} == '0' ]]; do
-		read -rp "Client WireGuard IPv4: ${BASE_IP}." -e -i "${DOT_IP}" DOT_IP
+		if [[ $AUTO_INSTALL != "y" ]]; then
+			read -rp "Client WireGuard IPv4: ${BASE_IP}." -e -i "${DOT_IP}" DOT_IP
+		fi
 		CLIENT_WG_IPV4="${BASE_IP}.${DOT_IP}"
 		IPV4_EXISTS=$(grep -c "$CLIENT_WG_IPV4/32" "/etc/wireguard/${SERVER_WG_NIC}.conf")
 
@@ -334,7 +356,9 @@ function newClient() {
 
 	BASE_IP=$(echo "$SERVER_WG_IPV6" | awk -F '::' '{ print $1 }')
 	until [[ ${IPV6_EXISTS} == '0' ]]; do
-		read -rp "Client WireGuard IPv6: ${BASE_IP}::" -e -i "${DOT_IP}" DOT_IP
+		if [[ $AUTO_INSTALL != "y" ]]; then
+			read -rp "Client WireGuard IPv6: ${BASE_IP}::" -e -i "${DOT_IP}" DOT_IP
+		fi
 		CLIENT_WG_IPV6="${BASE_IP}::${DOT_IP}"
 		IPV6_EXISTS=$(grep -c "${CLIENT_WG_IPV6}/128" "/etc/wireguard/${SERVER_WG_NIC}.conf")
 
